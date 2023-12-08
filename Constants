@@ -1,0 +1,3 @@
+private fun generateConstantGetter(key: String, default: Double): () -> Double {
+    // ...
+}
