@@ -1,0 +1,36 @@
+import edu.wpi.first.wpilibj.GenericHID;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.commands.HighGoalVision;
+
+/**
+ * Do nothing if a vision target is found.
+ * Otherwise, rumble the given controller. This is meant to make it clear to the driver they need to shoot manually.
+ */
+public class CheckVisionOrRumble extends CommandBase {
+    private final XboxController controller;
+
+    public CheckVisionOrRumble(XboxController controller) {
+        this.controller = controller;
+        addRequirements();  // Add subsystem requirements if needed
+    }
+
+    @Override
+    public void execute() {
+        if (!HighGoalVision.found_target()) {
+            controller.setRumble(GenericHID.RumbleType.kLeftRumble, 1.0);
+            controller.setRumble(GenericHID.RumbleType.kRightRumble, 1.0);
+        }
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        controller.setRumble(GenericHID.RumbleType.kLeftRumble, 0.0);
+        controller.setRumble(GenericHID.RumbleType.kRightRumble, 0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return HighGoalVision.found_target();
+    }
+}
