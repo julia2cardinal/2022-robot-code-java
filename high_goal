@@ -1,0 +1,74 @@
+import org.opencv.core.*;
+import org.opencv.imgproc.Imgproc;
+import org.opencv.core.Rect;
+import org.opencv.core.RotatedRect;
+import java.util.ArrayList;
+import java.util.List;
+
+public class VisionProcessor {
+
+    public static double getDistanceToTarget(double targetPitch, double targetHeight, double cameraAngle) {
+        return targetHeight / Math.tan(targetPitch + cameraAngle);
+    }
+
+    public static double calcAngle(double value, double centerValue, double focalLength) {
+        return Math.atan((value - centerValue) / focalLength);
+    }
+
+    public static RotatedRect findHighestTarget(double centerY, List<RotatedRect> targets) {
+        RotatedRect absoluteHighest = null;
+        RotatedRect highestTarget = null;
+
+        for (RotatedRect targetRect : targets) {
+            if (targetRect.center.y > centerY) {
+                Point[] points = new Point[4];
+                targetRect.points(points);
+                Point highestInContour = points[0];
+
+                for (Point point : points) {
+                    if (point.y > highestInContour.y) {
+                        highestInContour = point;
+                    }
+                }
+
+                if (absoluteHighest == null || highestInContour.y > absoluteHighest.center.y) {
+                    absoluteHighest = new RotatedRect(new Point(), new Size(), 0);
+                    absoluteHighest.center = highestInContour;
+                    highestTarget = targetRect;
+                }
+            }
+        }
+
+        return highestTarget;
+    }
+
+    public static Tuple<Double, Double> findTargetAngles(Config config, Mat image) {
+        double fovH = config.getCameraFov().getAspectH();
+        double fovV = config.getCameraFov().getAspectV();
+        double fovDiag = config.getCameraFov().getDiagFieldView();
+
+        double aspectDiagonal = Math.hypot(fovH, fovV);
+        double fieldViewH = Math.atan(Math.tan(fovDiag / 2.0) * (fovH / aspectDiagonal)) * 2.0;
+        double fieldViewV = Math.atan(Math.tan(fovDiag / 2.0) * (fovV / aspectDiagonal)) * 2.0;
+
+        double hFocalLength = image.size().width / (2.0 * Math.tan(fieldViewH / 2.0));
+        double vFocalLength = image.size().height / (2.0 * Math.tan(fieldViewV / 2.0));
+
+        double scoreThresh = config.getVisionConfig().getScoreThresh();
+        double sizeRelativeThresh = config.getVisionConfig().getSizeRelativeThresh();
+        double imageSize = Math.max(image.rows(), image.cols());
+        double imageCenterX = image.cols() / 2.0;
+        double imageCenterY = image.rows() / 2.0;
+
+        List<RotatedRect> targets = findTargets(config, image, scoreThresh, imageSize, sizeRelativeThresh);
+        RotatedRect highestTargetRect = findHighestTarget(imageCenterY, targets);
+
+        double yaw = calcAngle(highestTargetRect.center.x, imageCenterX, hFocalLength);
+        double pitch = -calcAngle(highestTargetRect.center.y, imageCenterY, vFocalLength);
+
+        return new Tuple<>(yaw, pitch);
+    }
+
+    public static List<RotatedRect> findTargets(Config config, Mat image, double scoreThresh, double imageSize, double sizeRelativeThresh) {
+        List<RotatedRect> targets = new ArrayList<>();
+        List<MatOfPoint> contours = getFilteredContours(c
