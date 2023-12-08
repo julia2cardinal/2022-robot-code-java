@@ -1,0 +1,53 @@
+import org.opencv.core.Point;
+
+public class Rect {
+
+    private final Point[] boxPoints;
+    private final Point center;
+    private final double height;
+    private final double width;
+    private final double area;
+    private final double angle;
+
+    public Rect(Point[] boxPoints) {
+        this.boxPoints = boxPoints;
+
+        // Calculate center point
+        double sumX = 0.0, sumY = 0.0;
+        for (Point point : boxPoints) {
+            sumX += point.x;
+            sumY += point.y;
+        }
+        this.center = new Point(sumX / 4.0, sumY / 4.0);
+
+        // Calculate rectangle height, width, area, and rotation angle
+        Point side1 = new Point(boxPoints[1].x - boxPoints[2].x, boxPoints[1].y - boxPoints[2].y);
+        this.height = Math.sqrt(side1.x * side1.x + side1.y * side1.y);
+
+        Point side2 = new Point(boxPoints[0].x - boxPoints[1].x, boxPoints[0].y - boxPoints[1].y);
+        this.width = Math.sqrt(side2.x * side2.x + side2.y * side2.y);
+
+        this.area = this.height * this.width;
+
+        double ang1 = Math.atan2(boxPoints[0].y - boxPoints[1].y, boxPoints[0].x - boxPoints[1].x);
+        double ang2 = Math.atan2(boxPoints[3].y - boxPoints[2].y, boxPoints[3].x - boxPoints[2].x);
+        this.angle = Math.toDegrees((ang1 - ang2 + 2 * Math.PI) % (2 * Math.PI));
+
+        // Tall rectangles are considered rotated an additional 90 degrees
+        if (this.width < this.height) {
+            this.angle += 90.0;
+        }
+    }
+
+    public double getCenterX() {
+        return this.center.x;
+    }
+
+    public double getCenterY() {
+        return this.center.y;
+    }
+
+    public double getAngle() {
+        return this.angle;
+    }
+}
