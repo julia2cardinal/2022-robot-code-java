@@ -1,0 +1,74 @@
+package frc.robot.commands;
+
+import com.revrobotics.ColorMatch;
+import com.revrobotics.ColorSensorV3;
+import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.util.Color;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.Constants;
+import frc.robot.subsystems.BallMotorSubsystem;
+
+/**
+ * Set a ball motor to the speed supplied by the speed lambda.
+ * This command does not halt its execution.
+ */
+public class GateSensored extends CommandBase {
+    private final BallMotorSubsystem system;
+    private final Runnable speed;
+    private final ColorSensorV3 sensor;
+    private final ColorMatch colorMatcher = new ColorMatch();
+
+    private final Color ourColor;
+    private final Color enemyColor;
+
+    private final Color blueTarget = new Color(0.143, 0.427, 0.429);
+    private final Color redTarget = new Color(0.143, 0.427, 0.429);
+
+    public GateSensored(BallMotorSubsystem system, Runnable speed, ColorSensorV3 sensor) {
+        this.system = system;
+        this.speed = speed;
+        this.sensor = sensor;
+        addRequirements(system);
+
+        if (DriverStation.getInstance().getAlliance() == DriverStation.Alliance.Blue) {
+            ourColor = blueTarget;
+            enemyColor = redTarget;
+        } else {
+            ourColor = redTarget;
+            enemyColor = blueTarget;
+        }
+
+        colorMatcher.addColorMatch(ourColor);
+        colorMatcher.addColorMatch(enemyColor);
+    }
+
+    @Override
+    public void execute() {
+        Color color = sensor.getColor();
+        SmartDashboard.putNumber("color red", color.red);
+        SmartDashboard.putNumber("color green", color.green);
+        SmartDashboard.putNumber("color blue", color.blue);
+        SmartDashboard.putNumber("proximity", sensor.getProximity());
+
+        SmartDashboard.putBoolean("our ball",
+                colorMatcher.matchClosestColor(color) == ourColor
+        );
+
+        if (sensor.getProximity() < Constants.kColorSensorProximityThreshold) {
+            system.setSpeed(speed);
+        } else {
+            system.setSpeed(0.0);
+        }
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        system.setSpeed(0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return false;
+    }
+}
