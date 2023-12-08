@@ -1,0 +1,24 @@
+import org.gradle.tooling.*;
+
+public class GradleBuild {
+
+    public static void main(String[] args) {
+        // Specify the project directory
+        String projectDir = "path/to/your/project";
+
+        // Set up the Gradle connection
+        ProjectConnection connection = GradleConnector.newConnector()
+                .forProjectDirectory(new File(projectDir))
+                .connect();
+
+        try {
+            // Build the project
+            BuildLauncher build = connection.newBuild();
+            build.forTasks("build");
+            build.run();
+        } finally {
+            // Close the connection
+            connection.close();
+        }
+    }
+}
