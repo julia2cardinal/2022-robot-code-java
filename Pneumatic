@@ -1,0 +1,27 @@
+package frc.robot.commands;
+
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.subsystems.SolenoidSubsystem;
+
+// A command that sets a solenoid to a specific state
+public class PneumaticCommand extends CommandBase {
+    private final SolenoidSubsystem solenoid;
+    private final DoubleSolenoid.Value state;
+
+    public PneumaticCommand(SolenoidSubsystem solenoid, DoubleSolenoid.Value state) {
+        this.solenoid = solenoid;
+        this.state = state;
+        addRequirements(solenoid);
+    }
+
+    @Override
+    public void execute() {
+        solenoid.set(state);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return false;
+    }
+}
