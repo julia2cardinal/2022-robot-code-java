@@ -1,0 +1,24 @@
+package frc.robot;
+
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.CANSparkMaxLowLevel;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.PneumaticsModuleType;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj2.command.button.JoystickButton;
+import edu.wpi.first.wpilibj.DigitalInput;
+import frc.robot.subsystems.SolenoidSubsystem;
+import frc.robot.subsystems.WinchSubsystem;
+
+public class ClimberTestContainer {
+    // Hardware and subsystem initialization
+    private final XboxController controller0 = new XboxController(0);
+
+    // climb
+    private final CANSparkMax winchMotor = new CANSparkMax(Constants.climbWinchID, CANSparkMaxLowLevel.MotorType.kBrushless);
+    private final WinchSubsystem winch = new WinchSubsystem(winchMotor, new DigitalInput(0), new DigitalInput(1));
+    private final DoubleSolenoid climbSolenoid = new DoubleSolenoid(PneumaticsModuleType.CTREPCM, Constants.climbSolenoidID.first, Constants.climbSolenoidID.second);
+    private final SolenoidSubsystem climbPneumatics = new SolenoidSubsystem(climbSolenoid);
+    
+    // Add your buttons and commands here if needed
+}
