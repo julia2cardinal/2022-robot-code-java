@@ -1,0 +1,297 @@
+package frc.robot.commands;
+
+import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import edu.wpi.first.wpilibj2.command.ParallelCommandGroup;
+import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;
+import frc.robot.Constants;
+import frc.robot.subsystems.BallMotorSubsystem;
+import frc.robot.subsystems.DrivetrainSubsystem;
+import frc.robot.subsystems.ShooterSubsystem;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj2.command.RumbleCommand;
+import org.photonvision.PhotonCamera;
+import org.photonvision.PhotonUtils;
+import org.photonvision.targeting.PhotonPipelineResult;
+import org.photonvision.targeting.PhotonTrackedTarget;
+import edu.wpi.first.wpilibj.util.Units;
+import java.util.function.Supplier;
+
+/**
+ * Control the indexer and gate while shooting is happening.
+ * This command does not control the ShooterSubsystem, but
+ * monitors its speed.
+ *
+ * If endAfterOneBall is true, the command stops after it thinks a ball has been shot.
+ */
+public class ShootBallMotor extends CommandBase {
+    private static final double speedTolerance = 7.0;
+
+    private final ShooterSubsystem shooter1;
+    private final ShooterSubsystem shooter2;
+    private final BallMotorSubsystem gate;
+    private final BallMotorSubsystem indexer;
+    private final boolean endAfterOneBall;
+
+    private int atSpeedCycles = 0;
+    private boolean atSpeedOnce = false;
+    private int belowSpeedCycles = 0;
+    private boolean belowSpeedOnce = false;
+
+    public ShootBallMotor(
+            ShooterSubsystem shooter1,
+            ShooterSubsystem shooter2,
+            BallMotorSubsystem gate,
+            BallMotorSubsystem indexer,
+            boolean endAfterOneBall) {
+        this.shooter1 = shooter1;
+        this.shooter2 = shooter2;
+        this.gate = gate;
+        this.indexer = indexer;
+        this.endAfterOneBall = endAfterOneBall;
+
+        addRequirements(gate, indexer);
+    }
+
+    private boolean atSpeed() {
+        return Math.abs(shooter1.getTargetDiff()) <= speedTolerance
+                && Math.abs(shooter2.getTargetDiff()) <= speedTolerance;
+    }
+
+    @Override
+    public void execute() {
+        boolean ready = atSpeed();
+
+        if (ready) {
+            atSpeedCycles++;
+            if (atSpeedCycles > 10) {
+                atSpeedOnce = true;
+            }
+            belowSpeedCycles = 0;
+        } else {
+            atSpeedCycles = 0;
+            if (atSpeedOnce) {
+                belowSpeedCycles++;
+                if (belowSpeedCycles > 10) {
+                    belowSpeedOnce = true;
+                }
+            }
+        }
+
+        if (ready) {
+            gate.setSpeed(Constants.gateSpeed);
+            indexer.setSpeed(Constants.intakeIndexerSpeed);
+
+            if (belowSpeedOnce) {
+                indexer.setSpeed(Constants.intakeIndexerSpeed);
+            } else {
+                indexer.setSpeed(0.0);
+            }
+        } else {
+            indexer.setSpeed(Constants.intakeIndexerSpeed);
+            gate.setSpeed(0.0);
+        }
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        gate.setSpeed(0.0);
+        indexer.setSpeed(0.0);
+
+        atSpeedOnce = false;
+        atSpeedCycles = 0;
+        belowSpeedOnce = false;
+        belowSpeedCycles = 0;
+    }
+
+    @Override
+    public boolean isFinished() {
+        return !endAfterOneBall || (atSpeedOnce && belowSpeedOnce && atSpeed());
+    }
+}
+
+public class HighGoalVision {
+    public static final PhotonCamera photonVision = new PhotonCamera("HighGoalCamera");
+
+    public static PhotonPipelineResult result() {
+        return photonVision.latestResult();
+    }
+
+    public static PhotonTrackedTarget bestTarget() {
+        return result().bestTarget();
+    }
+
+    public static boolean foundTarget() {
+        return result().hasTargets();
+    }
+
+    public static double yaw() {
+        return foundTarget() ? bestTarget().yaw() : 0.0;
+    }
+
+    public static double pitch() {
+        return foundTarget() ? bestTarget().pitch() : 0.0;
+    }
+
+    public static double centerDistance() {
+        if (foundTarget()) {
+            return PhotonUtils.calculateDistanceToTargetMeters(
+                    0.6731, // camera h m
+                    2.6416, // camera t m
+                    0.314, // camera pitch rad
+                    Units.degreesToRadians(pitch())
+            );
+        } else {
+            return 0.0;
+        }
+    }
+}
+
+public class TurnToHighGoal extends CommandBase {
+    private final DrivetrainSubsystem drivetrain;
+    private final TurnToAngleController control;
+    private final double yaw;
+    private final double heading;
+
+    public TurnToHighGoal(DrivetrainSubsystem drivetrain) {
+        this.drivetrain = drivetrain;
+        this.control = new TurnToAngleController(drivetrain);
+        this.yaw = Units.degreesToRadians(HighGoalVision.yaw());
+        this.heading = drivetrain.getHeading();
+
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void execute() {
+        control.execute(() -> heading + yaw / 1.2);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return !HighGoalVision.foundTarget() || control.finished();
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        drivetrain.tankDriveVolts(0.0, 0.0);
+    }
+}
+
+public class ShooterFixedVision extends CommandBase {
+    private final ShooterSubsystem shooter1;
+    private final ShooterSubsystem shooter2;
+    private final DualShooterPIDController control;
+    private DualShootSpeed speeds;
+
+    public ShooterFixedVision(ShooterSubsystem shooter1, ShooterSubsystem shooter2) {
+        this.shooter1 = shooter1;
+        this.shooter2 = shooter2;
+        this.control = new DualShooterPIDController(shooter1, shooter2);
+
+        addRequirements(shooter1, shooter2);
+    }
+
+    @Override
+    public void initialize() {
+        double distance = HighGoalVision.centerDistance();
+        speeds = ShootSpeedForDistance(distance);
+    }
+
+    @Override
+    public void execute() {
+        control.execute(speeds);
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        shooter1.setVoltage(0.0);
+        shooter1.setTarget(0.0);
+        shooter2.setVoltage(0.0);
+        shooter2.setTarget(0.0);
+    }
+}
+
+public class ShootVision extends SequentialCommandGroup {
+    public ShootVision(
+            DrivetrainSubsystem drivetrain,
+            ShooterSubsystem shooter1,
+            ShooterSubsystem shooter2,
+            BallMotorSubsystem gate,
+            BallMotorSubsystem indexer,
+            XboxController alertController,
+            boolean endAfterOneBall) {
+        addCommands(
+                new RumbleCommand(alertController, () -> !HighGoalVision.foundTarget()),
+                new ShootBallMotor(shooter1, shooter2, gate, indexer, endAfterOneBall)
+                        .raceWith(
+                                new ParallelCommandGroup(
+                                        new MaintainAngle(drivetrain),
+                                        new ShooterFixedVision(shooter1, shooter2)
+                                )
+                        )
+                        .withTimeout(2.0)
+        );
+    }
+}
+
+public class ShootDefaultDistance extends ShootBallMotor {
+    public ShootDefaultDistance(
+            ShooterSubsystem shooter1,
+            ShooterSubsystem shooter2,
+            BallMotorSubsystem gate,
+            BallMotorSubsystem indexer,
+            boolean endAfterOneBall) {
+        super(
+                shooter1,
+                shooter2,
+                gate,
+                indexer,
+                endAfterOneBall
+        );
+
+        DualShootSpeed speeds = ShootSpeedForDistance(Constants.shooterDefaultDist);
+        addCommands(
+                new ShootBallMotor(shooter1, shooter2, gate, indexer, endAfterOneBall)
+                        .raceWith(new DualShooterPID(shooter1, shooter2, () -> speeds))
+        );
+    }
+}
+
+public class ShootOutake extends ParallelCommandGroup {
+    public ShootOutake(
+            ShooterSubsystem shooter1,
+            ShooterSubsystem shooter2,
+            BallMotorSubsystem gate,
+            BallMotorSubsystem intakeIndexer) {
+        addCommands(
+                new FixedBallMotorSpeed(intakeIndexer, () -> Constants.intakeIndexerSpeed),
+                new FixedBallMotorSpeed(gate, () -> Constants.gateSpeed),
+                new DualShooterPID(shooter1, shooter2, () -> new DualShootSpeed(100.0, 100.0))
+        );
+    }
+}
+
+public class DebugShoot extends SequentialCommandGroup {
+    public DebugShoot(
+            XboxController alertController,
+            DrivetrainSubsystem drivetrain,
+            ShooterSubsystem shooter1,
+            ShooterSubsystem shooter2,
+            BallMotorSubsystem gate,
+            BallMotorSubsystem intakeIndexer) {
+        addCommands(
+                new RumbleCommand(alertController, () -> !HighGoalVision.foundTarget()),
+                new TurnToHighGoal(drivetrain)
+                        .raceWith(new ShooterSpinUpVision(shooter1, shooter2))
+                        .withTimeout(2.0),
+                new ShootBallMotor(shooter1, shooter2, gate, intakeIndexer, false)
+                        .raceWith(
+                                new ParallelCommandGroup(
+                                        new MaintainAngle(drivetrain),
+                                        new ShooterFixedVision(shooter1, shooter2)
+                                )
+                        )
+        );
+    }
+}
