@@ -1,0 +1,25 @@
+plugins {
+    id 'java'
+}
+
+group 'com.example'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-socketio'
+    implementation 'org.web3j:core:4.9.2'  // Replace with your desired Java dependencies
+}
+
+application {
+    mainClassName = 'com.example.Application'  // Replace with the main class of your application
+}
+
+test {
+    useJUnitPlatform()
+}
