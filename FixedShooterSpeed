@@ -1,0 +1,34 @@
+package frc.robot.commands;
+
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.subsystems.ShooterSubsystem;
+
+/**
+ * Drive the shooter motors at a fixed speed
+ */
+public class FixedShooterSpeed extends CommandBase {
+    private final ShooterSubsystem shooterSubsystem;
+    private final Runnable speed;
+
+    public FixedShooterSpeed(ShooterSubsystem shooterSubsystem, Runnable speed) {
+        this.shooterSubsystem = shooterSubsystem;
+        this.speed = speed;
+        addRequirements(shooterSubsystem);
+    }
+
+    @Override
+    public void execute() {
+        speed.run();
+        shooterSubsystem.setSpeed();
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        shooterSubsystem.setSpeed(0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return false;
+    }
+}
