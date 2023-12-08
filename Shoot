@@ -1,0 +1,109 @@
+package frc.robot.commands;
+
+import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import edu.wpi.first.wpilibj2.command.ParallelCommandGroup;
+import edu.wpi.first.wpilibj2.command.SequentialCommandGroup;
+import frc.robot.Constants;
+import frc.robot.subsystems.BallMotorSubsystem;
+import frc.robot.subsystems.DrivetrainSubsystem;
+import frc.robot.subsystems.ShooterSubsystem;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj2.command.RumbleCommand;
+import org.photonvision.PhotonCamera;
+import org.photonvision.PhotonUtils;
+import org.photonvision.targeting.PhotonPipelineResult;
+import org.photonvision.targeting.PhotonTrackedTarget;
+import edu.wpi.first.wpilibj.util.Units;
+import java.util.function.Supplier;
+
+/**
+ * Control the indexer and gate while shooting is happening.
+ * This command does not control the ShooterSubsystem, but
+ * monitors its speed.
+ *
+ * If endAfterOneBall is true, the command stops after it thinks a ball has been shot.
+ */
+public class ShootBallMotor extends CommandBase {
+    private static final double speedTolerance = 7.0;
+
+    private final ShooterSubsystem shooter1;
+    private final ShooterSubsystem shooter2;
+    private final BallMotorSubsystem gate;
+    private final BallMotorSubsystem indexer;
+    private final boolean endAfterOneBall;
+
+    private int atSpeedCycles = 0;
+    private boolean atSpeedOnce = false;
+    private int belowSpeedCycles = 0;
+    private boolean belowSpeedOnce = false;
+
+    public ShootBallMotor(
+            ShooterSubsystem shooter1,
+            ShooterSubsystem shooter2,
+            BallMotorSubsystem gate,
+            BallMotorSubsystem indexer,
+            boolean endAfterOneBall) {
+        this.shooter1 = shooter1;
+        this.shooter2 = shooter2;
+        this.gate = gate;
+        this.indexer = indexer;
+        this.endAfterOneBall = endAfterOneBall;
+
+        addRequirements(gate, indexer);
+    }
+
+    private boolean atSpeed() {
+        return Math.abs(shooter1.getTargetDiff()) <= speedTolerance
+                && Math.abs(shooter2.getTargetDiff()) <= speedTolerance;
+    }
+
+    @Override
+    public void execute() {
+        boolean ready = atSpeed();
+
+        if (ready) {
+            atSpeedCycles++;
+            if (atSpeedCycles > 10) {
+                atSpeedOnce = true;
+            }
+            belowSpeedCycles = 0;
+        } else {
+            atSpeedCycles = 0;
+            if (atSpeedOnce) {
+                belowSpeedCycles++;
+                if (belowSpeedCycles > 10) {
+                    belowSpeedOnce = true;
+                }
+            }
+        }
+
+        if (ready) {
+            gate.setSpeed(Constants.gateSpeed);
+            indexer.setSpeed(Constants.intakeIndexerSpeed);
+
+            if (belowSpeedOnce) {
+                indexer.setSpeed(Constants.intakeIndexerSpeed);
+            } else {
+                indexer.setSpeed(0.0);
+            }
+        } else {
+            indexer.setSpeed(Constants.intakeIndexerSpeed);
+            gate.setSpeed(0.0);
+        }
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        gate.setSpeed(0.0);
+        indexer.setSpeed(0.0);
+
+        atSpeedOnce = false;
+        atSpeedCycles = 0;
+        belowSpeedOnce = false;
+        belowSpeedCycles = 0;
+    }
+
+    @Override
+    public boolean isFinished() {
+        return
