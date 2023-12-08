@@ -1,0 +1,86 @@
+package frc.robot.commands;
+
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.Constants;
+import frc.robot.subsystems.DrivetrainSubsystem;
+
+public class TurnToAngleController {
+    private final DrivetrainSubsystem drivetrain;
+    private final PIDController pid;
+
+    public TurnToAngleController(DrivetrainSubsystem drivetrain) {
+        this.drivetrain = drivetrain;
+        this.pid = new PIDController(Constants.kTTAPidP, Constants.kTTAPidI, Constants.kTTAPidD);
+        this.pid.enableContinuousInput(-Math.PI, Math.PI);
+        this.pid.setTolerance(Constants.kDrivetrainAngleTolerance, Constants.kDrivetrainVelTolerance);
+    }
+
+    public void execute(Supplier<Double> setPt, double forward) {
+        // forward is in volts
+        double output = pid.calculate(drivetrain.getHeading(), setPt.get());
+        double effort = MathUtil.clamp(output, -Constants.kTTAClamp, Constants.kTTAClamp);
+
+        drivetrain.tankDriveVolts(effort * 12.0 + forward, -effort * 12.0 + forward);
+    }
+
+    public boolean finished() {
+        return pid.atSetpoint();
+    }
+}
+
+public class TurnToAngle extends CommandBase {
+    private final DrivetrainSubsystem driveSubsystem;
+    private final Supplier<Double> targetAngle;
+    private final TurnToAngleController control;
+
+    public TurnToAngle(DrivetrainSubsystem driveSubsystem, Supplier<Double> targetAngle) {
+        this.driveSubsystem = driveSubsystem;
+        this.targetAngle = targetAngle;
+        this.control = new TurnToAngleController(driveSubsystem);
+
+        addRequirements(driveSubsystem);
+    }
+
+    @Override
+    public void execute() {
+        control.execute(targetAngle, 0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return control.finished();
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        driveSubsystem.tankDriveVolts(0.0, 0.0);
+    }
+}
+
+public class MaintainAngle extends CommandBase {
+    private final DrivetrainSubsystem drivetrain;
+    private final TurnToAngleController control;
+    private double angle;
+
+    public MaintainAngle(DrivetrainSubsystem drivetrain) {
+        this.drivetrain = drivetrain;
+        this.control = new TurnToAngleController(drivetrain);
+
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void initialize() {
+        angle = drivetrain.getHeading();
+    }
+
+    @Override
+    public void execute() {
+        control.execute(() -> angle, 0.0);
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        drivetrain.tankDriveVolts(0.0, 0.0);
+    }
+}
