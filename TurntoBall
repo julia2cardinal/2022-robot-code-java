@@ -1,0 +1,113 @@
+package frc.robot.commands;
+
+import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.Constants;
+import frc.robot.subsystems.DrivetrainSubsystem;
+
+public class BallVisionNT {
+    public static final NetworkTableInstance ntInst = NetworkTableInstance.getDefault();
+    public static final NetworkTable table = ntInst.getTable("ML");
+    public static final NetworkTableEntry angle = table.getEntry("targetAngle");
+    public static final NetworkTableEntry foundTarget = table.getEntry("foundTarget");
+}
+
+public class TurnToBall extends CommandBase {
+    private final XboxController controller;
+    private final DrivetrainSubsystem drivetrain;
+    private final TurnToAngleController control;
+
+    public TurnToBall(XboxController controller, DrivetrainSubsystem drivetrain) {
+        this.controller = controller;
+        this.drivetrain = drivetrain;
+        this.control = new TurnToAngleController(drivetrain);
+
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void execute() {
+        double targetAngle = BallVisionNT.foundTarget.getBoolean(false)
+                ? drivetrain.getHeading() + BallVisionNT.angle.getDouble(0.0) / 1.6
+                : drivetrain.getHeading();
+
+        control.execute(() -> targetAngle, 4.0 * (controller.getRawAxis(1) + controller.getRawAxis(5) * Constants.kDrivetrainFineForwardSpeed));
+    }
+
+    @Override
+    public boolean isFinished() {
+        //return !BallVisionNT.foundTarget.getBoolean(false);
+        return false;
+    }
+}
+
+public class TurnToBallFixed extends CommandBase {
+    private final XboxController controller;
+    private final DrivetrainSubsystem drivetrain;
+    private final TurnToAngleController control;
+    private double targetAngle;
+
+    public TurnToBallFixed(XboxController controller, DrivetrainSubsystem drivetrain) {
+        this.controller = controller;
+        this.drivetrain = drivetrain;
+        this.control = new TurnToAngleController(drivetrain);
+
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void initialize() {
+        targetAngle = BallVisionNT.angle.getDouble(0.0);
+    }
+
+    @Override
+    public void execute() {
+        control.execute(() -> targetAngle, 4.0 * (controller.getRawAxis(1) + controller.getRawAxis(5) * Constants.kDrivetrainFineForwardSpeed));
+    }
+
+    @Override
+    public boolean isFinished() {
+        return !BallVisionNT.foundTarget.getBoolean(false) || control.finished();
+    }
+}
+
+public class TurnToBallDirect extends CommandBase {
+    private final XboxController controller;
+    private final DrivetrainSubsystem drivetrain;
+    private final PIDController pid;
+
+    public TurnToBallDirect(XboxController controller, DrivetrainSubsystem drivetrain) {
+        this.controller = controller;
+        this.drivetrain = drivetrain;
+        this.pid = new PIDController(Constants.kTTAPidP, Constants.kTTAPidI, Constants.kTTAPidD);
+
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void initialize() {
+        pid.enableContinuousInput(-Math.PI, Math.PI);
+        pid.setTolerance(Constants.kDrivetrainAngleTolerance, Constants.kDrivetrainVelTolerance);
+    }
+
+    @Override
+    public void execute() {
+        double forward = 4.0 * (controller.getRawAxis(1) + controller.getRawAxis(5) * Constants.kDrivetrainFineForwardSpeed);
+
+        // get error directly from ball angle in networktables
+        double error = BallVisionNT.angle.getDouble(0.0);
+
+        double output = pid.calculate(error, 0.0);
+        double effort = MathUtil.clamp(output, -Constants.kTTAClamp, Constants.kTTAClamp);
+
+        drivetrain.tankDriveVolts(effort * 12.0 + forward, -effort * 12.0 + forward);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return BallVisionNT.foundTarget.getBoolean(false) || pid.atSetpoint();
+    }
+}
