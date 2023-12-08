@@ -1,0 +1,165 @@
+package frc.robot.commands;
+
+import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.filter.SlewRateLimiter;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
+import edu.wpi.first.math.kinematics.DifferentialDriveKinematics;
+import edu.wpi.first.math.kinematics.DifferentialDriveWheelSpeeds;
+import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.Constants;
+import frc.robot.subsystems.DrivetrainSubsystem;
+
+import static java.lang.Math.abs;
+import static java.lang.Math.atan2;
+
+public class DrivetrainPIDController {
+    private final PIDController leftPID = new PIDController(
+            Constants.kDrivetrainPidP,
+            Constants.kDrivetrainPidI,
+            Constants.kDrivetrainPidD
+    );
+
+    private final PIDController rightPID = new PIDController(
+            Constants.kDrivetrainPidRightP,
+            Constants.kDrivetrainPidRightI,
+            Constants.kDrivetrainPidRightD
+    );
+
+    public DrivetrainPIDController() {
+        leftPID.setIntegratorRange(-0.5, 0.5);
+        rightPID.setIntegratorRange(-0.5, 0.5);
+    }
+
+    public void execute(DifferentialDriveWheelSpeeds speeds, DrivetrainSubsystem drivetrain) {
+        double currentRightSpeed = drivetrain.getWheelSpeeds().rightMetersPerSecond;
+        double currentLeftSpeed = drivetrain.getWheelSpeeds().leftMetersPerSecond;
+
+        double leftSpeedToSet = leftPID.calculate(currentLeftSpeed, speeds.leftMetersPerSecond);
+        double rightSpeedToSet = rightPID.calculate(currentRightSpeed, speeds.rightMetersPerSecond);
+
+        drivetrain.tankDriveVolts(leftSpeedToSet, rightSpeedToSet);
+    }
+}
+
+public class DrivetrainPIDAngularController {
+    private final DrivetrainPIDController driveController = new DrivetrainPIDController();
+    private final PIDController angleController = new PIDController(0.05, 0.0, 0.0);
+
+    private final DifferentialDriveKinematics kinematics = new DifferentialDriveKinematics(21.5);
+
+    public DrivetrainPIDAngularController(DrivetrainSubsystem drivetrainSubsystem) {
+        angleController.enableContinuousInput(0.0, 2.0 * Math.PI);
+    }
+
+    public void execute(double forward, double angle, DrivetrainSubsystem drivetrainSubsystem) {
+        double currentAngle = drivetrainSubsystem.getHeading();
+        double offset = angleController.calculate(currentAngle, angle);
+
+        ChassisSpeeds chassisSpeeds = new ChassisSpeeds(forward, 0.0, offset);
+        DifferentialDriveWheelSpeeds newSpeeds = kinematics.toWheelSpeeds(chassisSpeeds);
+
+        driveController.execute(newSpeeds, drivetrainSubsystem);
+    }
+}
+
+public class DrivetrainPIDCommand extends CommandBase {
+    private final DrivetrainPIDController controller = new DrivetrainPIDController();
+    private final DrivetrainSubsystem drivetrain;
+    private final DifferentialDriveWheelSpeeds periodic;
+
+    public DrivetrainPIDCommand(DrivetrainSubsystem drivetrain, DifferentialDriveWheelSpeeds periodic) {
+        this.drivetrain = drivetrain;
+        this.periodic = periodic;
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void execute() {
+        controller.execute(periodic, drivetrain);
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        drivetrain.tankDriveVolts(0.0, 0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return false;
+    }
+}
+
+public class DrivetrainPIDAngularCommand extends CommandBase {
+    private final DrivetrainPIDAngularController controller = new DrivetrainPIDAngularController();
+    private final DrivetrainSubsystem drivetrain;
+    private final Pair<Double, Double> periodic;
+
+    public DrivetrainPIDAngularCommand(DrivetrainSubsystem drivetrain, Pair<Double, Double> periodic) {
+        this.drivetrain = drivetrain;
+        this.periodic = periodic;
+        addRequirements(drivetrain);
+    }
+
+    @Override
+    public void execute() {
+        controller.execute(periodic.first, periodic.second, drivetrain);
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        drivetrain.tankDriveVolts(0.0, 0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return false;
+    }
+}
+
+public class JoystickDrive {
+    public static DrivetrainPIDAngularCommand create(DrivetrainSubsystem drivetrain, XboxController controller) {
+        return new DrivetrainPIDAngularCommand(drivetrain, () -> {
+            double angle = atan2(controller.getY(GenericHID.Hand.kLeft), controller.getX(GenericHID.Hand.kLeft));
+            if (angle < 0) {
+                angle += 2.0 * Math.PI;
+            }
+
+            return new Pair<>(0.0, angle);
+        });
+    }
+}
+
+public class ArcadeDrive {
+    public static DrivetrainPIDCommand create(DrivetrainSubsystem drivetrain, XboxController controller) {
+        DifferentialDriveKinematics kinematics = new DifferentialDriveKinematics(21.5);
+        SlewRateLimiter forwardFilter = new SlewRateLimiter(Constants.kDrivetrainSlewRateForwardLimit);
+        SlewRateLimiter rotationFilter = new SlewRateLimiter(Constants.kDrivetrainSlewRateRotationLimit);
+
+        return new DrivetrainPIDCommand(drivetrain, () -> {
+            double forward = controller.getY(GenericHID.Hand.kLeft) * abs(controller.getY(GenericHID.Hand.kLeft)) * 5;
+            double rotation = -controller.getX(GenericHID.Hand.kLeft) * abs(controller.getX(GenericHID.Hand.kLeft)) * 1;
+
+            return kinematics.toWheelSpeeds(new ChassisSpeeds(forwardFilter.calculate(forward), 0.0, rotationFilter.calculate(rotation)));
+        });
+    }
+}
+
+public class DualStickArcadeDrive {
+    public static DrivetrainPIDCommand create(DrivetrainSubsystem drivetrain, XboxController controller) {
+        DifferentialDriveKinematics kinematics = new DifferentialDriveKinematics(21.5);
+        SlewRateLimiter forwardFilter = new SlewRateLimiter(Constants.kDrivetrainSlewRateForwardLimit);
+        SlewRateLimiter rotationFilter = new SlewRateLimiter(Constants.kDrivetrainSlewRateRotationLimit);
+
+        double regularForwardSpeed = Constants.kDrivetrainRegularForwardSpeed;
+        double regularRotationSpeed = Constants.kDrivetrainRegularRotationSpeed;
+
+        double fineForwardSpeed = Constants.kDrivetrainFineForwardSpeed;
+        double fineRotationSpeed = Constants.kDrivetrainFineRotationSpeed;
+
+        return new DrivetrainPIDCommand(drivetrain, () -> {
+            double forward = (controller.getY(GenericHID.Hand.kLeft) * abs(controller.getY(GenericHID.Hand.kLeft)) * regularForwardSpeed) +
+                    (controller.getY(GenericHID.Hand.kRight) * abs(controller.getY(GenericHID.Hand.kRight)) * fineForwardSpeed);
+            double rotation = (-controller
