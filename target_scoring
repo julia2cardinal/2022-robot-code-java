@@ -1,0 +1,53 @@
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Point;
+
+public class TargetScoring {
+
+    // Number of contours to consider (chosen by size)
+    private static final int NUM_CONTOURS = 8;
+
+    // Scoring exponents
+    private static class ScoringExps {
+        public static final double COVERAGE = 1.5;
+        public static final double ASPECT = 0.8;
+    }
+
+    public static double areaCoverageScore(Rect rect, MatOfPoint contour) {
+        double coverage = Imgproc.contourArea(contour) / rect.getArea();
+        return 1.0 - Math.pow(1.0 - coverage, ScoringExps.COVERAGE);
+    }
+
+    public static double aspectRatioScore(Rect rect) {
+        double w = rect.getWidth();
+        double h = rect.getHeight();
+        double aspect = Math.min(w, h) / Math.max(w, h);
+        return Math.max(1.0 - Math.pow(Math.abs(aspect - 2.6), ScoringExps.ASPECT), 0.0);
+    }
+
+    public static double targetAngleScore(Rect rect) {
+        if ((rect.getAngle() + 90 > 0.0 && rect.getAngle() + 90 < 40.0) ||
+            (rect.getAngle() + 90 > 140.0 && rect.getAngle() + 90 < 180)) {
+            return 1.0;
+        } else {
+            return 0.0;
+        }
+    }
+
+    public static double targetSizeScore(Rect rect, double imageSize, double relativeThresh) {
+        double thresh = imageSize * relativeThresh;
+        if (Math.max(rect.getWidth(), rect.getHeight()) >= thresh) {
+            return 1.0;
+        } else {
+            return 0.0;
+        }
+    }
+
+    public static boolean checkTarget(Rect rect, MatOfPoint contour, double scoreThresh, double imageSize, double sizeRelativeThresh) {
+        double score = (aspectRatioScore(rect) +
+                        areaCoverageScore(rect, contour) + 
+                        targetAngleScore(rect) +
+                        2.0 * targetSizeScore(rect, imageSize, sizeRelativeThresh)) / 5.0;
+
+        return score > scoreThresh;
+    }
+}
