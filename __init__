@@ -1,0 +1,74 @@
+import org.opencv.core.*;
+import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.videoio.VideoCapture;
+import org.opencv.imgproc.Imgproc;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
+
+public class HighGoal {
+
+    private final String name;
+    private final VideoCapture cameraSource;
+    private final ZMQ.Socket sender;
+
+    public HighGoal(String cameraName, int cameraId) {
+        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+        this.name = cameraName;
+        this.cameraSource = new VideoCapture(cameraId);
+        this.sender = new ZContext().createSocket(ZMQ.PUSH);
+        this.sender.connect("tcp://10.20.36.100:5555");
+
+        if (!cameraSource.isOpened()) {
+            System.err.println("Failed to open camera " + cameraName + " with id " + cameraId + ".");
+            System.exit(1);
+        }
+
+        System.out.println("Success! VisionInstance was initialized.");
+    }
+
+    public void run() {
+        Mat frame = new Mat();
+        if (cameraSource.read(frame)) {
+            int height = frame.rows();
+            int width = frame.cols();
+            double ratio = (double) height / width;
+
+            MatOfRotatedRect foundTargets = findTargets(highGoalConfig, frame, 0.5, width, ratio);
+
+            for (RotatedRect rect : foundTargets.toArray()) {
+                Point[] points = new Point[4];
+                rect.points(points);
+                for (int j = 0; j < 4; j++) {
+                    Imgproc.line(frame, points[j], points[(j + 1) % 4], new Scalar(10, 255, 0), 4);
+                }
+            }
+
+            stream(frame);
+        } else {
+            System.err.println("Cannot receive frame from camera " + name + ". Stream end?");
+        }
+    }
+
+    public void stream(Mat image) {
+        Imgcodecs.imencode(".png", image, new MatOfByte());
+        byte[] byteArray = new MatOfByte().toArray();
+        sender.send(byteArray, 0);
+    }
+
+    private MatOfRotatedRect findTargets(Mat config, Mat frame, double threshold, int width, double ratio) {
+        // Implement your find_targets method here
+        // This method should return a MatOfRotatedRect containing the found targets
+        // You may need to use the Imgproc and Core classes from OpenCV for image processing
+        // Adjust the method signature based on your specific requirements
+        return new MatOfRotatedRect();
+    }
+
+    public static void main(String[] args) {
+        int cameraID = Integer.parseInt(args[0]);
+        HighGoal highGoal = new HighGoal("High Goal", cameraID);
+
+        while (true) {
+            highGoal.run();
+        }
+    }
+}
