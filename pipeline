@@ -1,0 +1,61 @@
+import org.opencv.core.*;
+import org.opencv.imgproc.Imgproc;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ImageProcessor {
+
+    static {
+        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+    }
+
+    private static Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5, 5));
+
+    public static List<MatOfPoint> getFilteredContours(Config config, Mat sourceImage) {
+        Mat image = new Mat();
+        sourceImage.copyTo(image);
+
+        // Apply morphological transformations
+        // image = applyMorph(config, image);  // Uncomment if needed
+        image = applyHsvFilter(config, image);
+
+        return findContours(image);
+    }
+
+    public static Mat applyHsvFilter(Config config, Mat image) {
+        Mat hsvImage = new Mat();
+        Imgproc.cvtColor(image, hsvImage, Imgproc.COLOR_BGR2HSV);
+
+        Scalar hsvLow = new Scalar(config.getHsvLowH(), config.getHsvLowS(), config.getHsvLowV());
+        Scalar hsvHigh = new Scalar(config.getHsvHighH(), config.getHsvHighS(), config.getHsvHighV());
+
+        Mat thresholdImage = new Mat();
+        Core.inRange(hsvImage, hsvLow, hsvHigh, thresholdImage);
+
+        return thresholdImage;
+    }
+
+    public static Mat applyMorph(Config config, Mat image) {
+        if (config.isDoDilate()) {
+            Imgproc.dilate(image, image, kernel);
+        }
+        Mat opened = new Mat();
+        Imgproc.morphologyEx(image, opened, Imgproc.MORPH_OPEN, kernel);
+        return opened;
+    }
+
+    public static List<MatOfPoint> findContours(Mat image) {
+        List<MatOfPoint> contours = new ArrayList<>();
+        Mat hierarchy = new Mat();
+
+        Imgproc.findContours(image, contours, hierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE);
+
+        // Return contours sorted by size
+        contours.sort((c1, c2) -> Double.compare(Imgproc.contourArea(c2), Imgproc.contourArea(c1)));
+        return contours;
+    }
+
+    public static void main(String[] args) {
+        // Add your main method logic here
+    }
+}
