@@ -1,0 +1,41 @@
+package frc.robot.commands;
+
+import edu.wpi.first.math.controller.ProfiledPIDController;
+import edu.wpi.first.math.trajectory.TrapezoidProfile;
+import frc.robot.Constants;
+import frc.robot.subsystems.WinchSubsystem;
+import edu.wpi.first.wpilibj2.command.ProfiledPIDCommand;
+
+/** A command that will turn the robot to the specified angle using a motion profile. */
+public class WinchTrapezoidal extends ProfiledPIDCommand {
+    private final WinchSubsystem winch;
+
+    public WinchTrapezoidal(double targetDistance, WinchSubsystem winch) {
+        super(
+            new ProfiledPIDController(
+                Constants.elevatorP,
+                Constants.elevatorI,
+                Constants.elevatorD,
+                new TrapezoidProfile.Constraints(
+                    Constants.elevatorMaxVel,
+                    Constants.elevatorMaxAccel
+                )
+            ), // Close loop on heading
+            winch::getPosition, // Set reference to target
+            targetDistance, // Pipe output to turn robot
+            (output, _) -> winch.setVoltage(output), // Require the drive
+            winch
+        );
+        this.winch = winch;
+
+        // Set the controller tolerance - the delta tolerance ensures the robot is stationary at the
+        // setpoint before it is considered as having reached the reference
+        getController().setTolerance(Constants.elevatorPosTolerance, 0.0001);
+    }
+
+    // End when the controller is at the reference.
+    @Override
+    public boolean isFinished() {
+        return getController().atGoal() || (winch.atLower() || winch.atUpper());
+    }
+}
