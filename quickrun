@@ -1,0 +1,45 @@
+import edu.wpi.first.networktables.EntryListenerFlags;
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.NetworkTableValue;
+import edu.wpi.first.wpilibj.tables.EntryListenerFlags;
+
+import java.io.FileWriter;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        NetworkTableInstance inst = NetworkTableInstance.getDefault();
+        inst.startClient("roborio-2036-frc.local");
+        NetworkTable table = inst.getTable("pidtunedrive");
+
+        List<String> values = new ArrayList<>();
+        table.addEntryListener("pidtunedrive", (table1, key, entry, value, flags) -> {
+            if (flags == EntryListenerFlags.kNew || flags == EntryListenerFlags.kUpdate) {
+                values.add(value.getString());
+            }
+        }, EntryListenerFlags.kNew | EntryListenerFlags.kUpdate);
+
+        System.out.println("This is just to pause the thread. Press enter when done!");
+        try {
+            System.in.read();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        String fileName = "result" + LocalDateTime.now() + ".txt";
+        try (FileWriter fileWriter = new FileWriter(fileName)) {
+            for (String value : values) {
+                fileWriter.write(value + System.lineSeparator());
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("Done!");
+    }
+}
