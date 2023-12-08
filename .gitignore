@@ -1,0 +1,13 @@
+.idea/
+.gradle/
+networktables.ini
+networktables.ini.bak
+simgui-ds.json
+simgui.json
+.DS_Store
+.vscode/
+lib
+./vision/high_goal_python/__pycache__
+**/__pycache__
+./liverecord/frontend/node_modules/
+node_modules
