@@ -1,0 +1,120 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
+public class PidFinder {
+    private static String mode = "BOTH";
+    private static final double c = 2;
+    private static final double distance = 0.01;
+    private static double x1 = 0;
+    private static double x2 = -1;
+    private static double middlePoint = -1;
+    private static double x3 = -1;
+    private static double t = -1;
+    private static double l = -1;
+    private static double maxSlope = 0;
+
+    public static void main(String[] args) {
+        if (args.length < 1) {
+            System.out.println("Please input filename");
+            System.exit(1);
+        } else {
+            String filename = args[0];
+            if (args.length > 1) {
+                mode = args[1].toUpperCase();
+            }
+
+            if (!fileExists(filename)) {
+                System.out.println("Please input a valid file");
+                System.exit(1);
+            }
+
+            if (!isValidMode()) {
+                System.out.println("Please pass in a valid method:\n ZN for Ziegler Nichols Open Loop Method \n CC for the Cohen-Coon Open Loop Method \n BOTH for both of them");
+                System.exit(1);
+            }
+
+            processFile(filename);
+        }
+    }
+
+    private static boolean fileExists(String filename) {
+        return new java.io.File(filename).exists();
+    }
+
+    private static boolean isValidMode() {
+        return mode.equals("BOTH") || mode.equals("ZN") || mode.equals("CC");
+    }
+
+    private static void znOpen() {
+        double gainKc = (1.2 / k) * t / l;
+        double resetTime = 2 * l;
+        double derivativeTime = 0.5 * l;
+
+        System.out.println("ZN gain_kc, reset_time, derivative_time: " + gainKc + ", " + resetTime + ", " + derivativeTime);
+    }
+
+    private static void ccOpen() {
+        double gainKc = 1.35 / (k * (t / l + 0.092));
+        double resetTime = 2.5 * l * (t + 0.185 * l) / (t + 0.611 * l);
+        double derivativeTime = 0.37 * l * (t / (t + 0.185 * l));
+
+        System.out.println("CC gain_kc, reset_time, derivative_time: " + gainKc + ", " + resetTime + ", " + derivativeTime);
+    }
+
+    private static void processFile(String filename) {
+        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
+            String line;
+            int lineNumber = 0;
+            double setpoint = 0;
+
+            while ((line = br.readLine()) != null) {
+                if (lineNumber > 0) {
+                    String[] values = line.split(",");
+                    double currentSetpoint = Double.parseDouble(values[2]);
+
+                    if ((currentSetpoint - setpoint) / (Double.parseDouble(values[0]) - Double.parseDouble(values[0]) - 1) > c) {
+                        x1 = Double.parseDouble(values[0]);
+                    }
+
+                    if (Math.abs(Double.parseDouble(values[1]) - setpoint) < distance && x3 < 0) {
+                        x3 = Double.parseDouble(values[0]);
+                    }
+
+                    if (lineNumber < lineNumber - 1) {
+                        double currentSlope = (Double.parseDouble(values[1]) - Double.parseDouble(values[1]) - 1) / (Double.parseDouble(values[0]) - Double.parseDouble(values[0]) - 1);
+
+                        if (currentSlope > maxSlope) {
+                            maxSlope = currentSlope;
+                            middlePoint = Double.parseDouble(values[0]);
+                        }
+                    }
+                } else {
+                    setpoint = Double.parseDouble(line.split(",")[2]);
+                }
+
+                lineNumber++;
+            }
+
+            x2 = (-middlePoint / maxSlope) + middlePoint;
+            System.out.println("x1, x2, x3: " + x1 + ", " + x2 + ", " + x3);
+            t = x3 - x2;
+            l = x2 - x1;
+            System.out.println(" ");
+            System.out.println("t, l: " + t + ", " + l);
+            k = setpoint - Double.parseDouble(line.split(",")[1]);
+            System.out.println(" ");
+
+            if (mode.equals("CC")) {
+                ccOpen();
+            } else if (mode.equals("ZN")) {
+                znOpen();
+            } else {
+                ccOpen();
+                znOpen();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
