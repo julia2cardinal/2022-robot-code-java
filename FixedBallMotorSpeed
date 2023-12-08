@@ -1,0 +1,35 @@
+package frc.robot.commands;
+
+import edu.wpi.first.wpilibj2.command.CommandBase;
+import frc.robot.subsystems.BallMotorSubsystem;
+
+/**
+ * Set a ball motor to the speed supplied by the speed lambda.
+ * This command does not halt its execution.
+ */
+public class FixedBallMotorSpeed extends CommandBase {
+    private final BallMotorSubsystem system;
+    private final Runnable speed;
+
+    public FixedBallMotorSpeed(BallMotorSubsystem system, Runnable speed) {
+        this.system = system;
+        this.speed = speed;
+        addRequirements(system);
+    }
+
+    @Override
+    public void execute() {
+        speed.run();
+        system.setSpeed();
+    }
+
+    @Override
+    public void end(boolean interrupted) {
+        system.setSpeed(0.0);
+    }
+
+    @Override
+    public boolean isFinished() {
+        return false;
+    }
+}
